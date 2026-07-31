@@ -1,5 +1,5 @@
 import { createClient } from "@libsql/client";
-import type { NeighborhoodProfile } from "@/lib/types";
+import type { NeighborhoodProfile, ResearchJob } from "@/lib/types";
 
 const client = createClient({
   url: process.env.TURSO_DATABASE_URL ?? "",
@@ -17,17 +17,31 @@ let schemaReady: Promise<void> | null = null;
 function ensureSchema(): Promise<void> {
   if (!schemaReady) {
     schemaReady = client
-      .execute(
-        `CREATE TABLE IF NOT EXISTS neighborhood_profiles (
-          zip TEXT NOT NULL,
-          neighborhood_key TEXT NOT NULL,
-          neighborhood TEXT NOT NULL,
-          city TEXT NOT NULL,
-          profile TEXT NOT NULL,
-          sources TEXT NOT NULL,
-          cached_at TEXT NOT NULL,
-          PRIMARY KEY (zip, neighborhood_key)
-        )`
+      .batch(
+        [
+          `CREATE TABLE IF NOT EXISTS neighborhood_profiles (
+            zip TEXT NOT NULL,
+            neighborhood_key TEXT NOT NULL,
+            neighborhood TEXT NOT NULL,
+            city TEXT NOT NULL,
+            profile TEXT NOT NULL,
+            sources TEXT NOT NULL,
+            cached_at TEXT NOT NULL,
+            PRIMARY KEY (zip, neighborhood_key)
+          )`,
+          `CREATE TABLE IF NOT EXISTS research_jobs (
+            id TEXT PRIMARY KEY,
+            status TEXT NOT NULL,
+            neighborhood TEXT NOT NULL,
+            city TEXT NOT NULL,
+            zip TEXT NOT NULL,
+            profile TEXT,
+            sources TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL
+          )`,
+        ],
+        "write"
       )
       .then(() => undefined);
   }
@@ -87,5 +101,67 @@ export async function saveNeighborhoodProfile(
       JSON.stringify(profile.sources),
       profile.cachedAt,
     ],
+  });
+}
+
+export async function createResearchJob(params: {
+  neighborhood: string;
+  city: string;
+  zip: string;
+}): Promise<string> {
+  await ensureSchema();
+
+  const id = crypto.randomUUID();
+  await client.execute({
+    sql: `INSERT INTO research_jobs (id, status, neighborhood, city, zip, created_at)
+          VALUES (?, 'pending', ?, ?, ?, ?)`,
+    args: [id, params.neighborhood, params.city, params.zip, new Date().toISOString()],
+  });
+  return id;
+}
+
+export async function getResearchJob(id: string): Promise<ResearchJob | null> {
+  await ensureSchema();
+
+  const result = await client.execute({
+    sql: `SELECT id, status, neighborhood, city, zip, profile, sources, error_message
+          FROM research_jobs WHERE id = ?`,
+    args: [id],
+  });
+
+  const row = result.rows[0];
+  if (!row) return null;
+
+  return {
+    id: row.id as string,
+    status: row.status as ResearchJob["status"],
+    neighborhood: row.neighborhood as string,
+    city: row.city as string,
+    zip: row.zip as string,
+    profile: (row.profile as string | null) ?? null,
+    sources: row.sources ? (JSON.parse(row.sources as string) as string[]) : null,
+    errorMessage: (row.error_message as string | null) ?? null,
+  };
+}
+
+export async function completeResearchJob(
+  id: string,
+  profile: string,
+  sources: string[]
+): Promise<void> {
+  await ensureSchema();
+
+  await client.execute({
+    sql: `UPDATE research_jobs SET status = 'done', profile = ?, sources = ? WHERE id = ?`,
+    args: [profile, JSON.stringify(sources), id],
+  });
+}
+
+export async function failResearchJob(id: string, errorMessage: string): Promise<void> {
+  await ensureSchema();
+
+  await client.execute({
+    sql: `UPDATE research_jobs SET status = 'error', error_message = ? WHERE id = ?`,
+    args: [errorMessage, id],
   });
 }

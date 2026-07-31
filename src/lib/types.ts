@@ -38,6 +38,17 @@ export interface NeighborhoodProfile {
   cachedAt: string;
 }
 
+export interface ResearchJob {
+  id: string;
+  status: "pending" | "done" | "error";
+  neighborhood: string;
+  city: string;
+  zip: string;
+  profile: string | null;
+  sources: string[] | null;
+  errorMessage: string | null;
+}
+
 export interface GenerateRequestBody {
   address: string;
   facts: string;

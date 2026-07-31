@@ -17,6 +17,9 @@ interface LoadingState {
   detail: string;
 }
 
+const POLL_INTERVAL_MS = 3000;
+const MAX_POLL_ATTEMPTS = 100; // ~5 minutes
+
 export default function PropertyForm() {
   const [step, setStep] = useState<Step>("form");
   const [loading, setLoading] = useState<LoadingState>({
@@ -108,7 +111,7 @@ export default function PropertyForm() {
         detail:
           "Searching real sources for schools, parks, and what makes this area special — never copying other listings.",
       });
-      const neighborhoodRes = await fetch("/api/neighborhood", {
+      const startRes = await fetch("/api/neighborhood/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -118,12 +121,15 @@ export default function PropertyForm() {
           zip: resolvedGeocode.zip ?? "",
         }),
       });
-      const neighborhoodData = await neighborhoodRes.json();
-      if (!neighborhoodRes.ok) {
-        throw new Error(
-          neighborhoodData.error ?? "Failed to research the neighborhood."
-        );
+      const startData = await startRes.json();
+      if (!startRes.ok) {
+        throw new Error(startData.error ?? "Failed to start neighborhood research.");
       }
+
+      const neighborhoodProfile: string =
+        startData.status === "done"
+          ? startData.profile
+          : await pollForResearchResult(startData.jobId as string);
 
       setLoading({
         headline: "Writing your listing...",
@@ -140,7 +146,7 @@ export default function PropertyForm() {
           neighborhood: confirmedNeighborhood,
           city: resolvedGeocode.city ?? "",
           zip: resolvedGeocode.zip ?? "",
-          neighborhoodProfile: neighborhoodData.profile,
+          neighborhoodProfile,
         }),
       });
       const generateData = await generateRes.json();
@@ -154,6 +160,39 @@ export default function PropertyForm() {
       setError(err instanceof Error ? err.message : "Something went wrong.");
       setStep(geocode?.neighborhoodNeedsConfirmation ? "confirm" : "form");
     }
+  }
+
+  async function pollForResearchResult(jobId: string): Promise<string> {
+    for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+      if (attempt === 10) {
+        setLoading({
+          headline: "Still researching...",
+          detail:
+            "Newer or less-documented areas can take a couple of minutes. Hang tight.",
+        });
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+
+      const statusRes = await fetch(
+        `/api/neighborhood/status?jobId=${encodeURIComponent(jobId)}`
+      );
+      const statusData = await statusRes.json();
+      if (!statusRes.ok) {
+        throw new Error(statusData.error ?? "Failed to check research status.");
+      }
+
+      if (statusData.status === "done") {
+        return statusData.profile as string;
+      }
+      if (statusData.status === "error") {
+        throw new Error(statusData.errorMessage ?? "Neighborhood research failed.");
+      }
+    }
+
+    throw new Error(
+      "Neighborhood research is taking longer than expected. Please try again."
+    );
   }
 
   function handleStartOver() {
