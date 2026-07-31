@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+
+  /* Brand palette, derived from the HomeBlurb / Megapixeler house mark */
+  --brand-ink: #1a1a1a;
+  --brand-charcoal: #2b2b2b;
+  --brand-slate: #6a6a6a;
+  --brand-green-deep: #1b6e3a;
+  --brand-green: #2e7d1f;
+  --brand-green-mid: #4aa32e;
+  --brand-green-light: #7ccb4d;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-charcoal: var(--brand-charcoal);
+  --color-brand-slate: var(--brand-slate);
+  --color-brand-green-deep: var(--brand-green-deep);
+  --color-brand-green: var(--brand-green);
+  --color-brand-green-mid: var(--brand-green-mid);
+  --color-brand-green-light: var(--brand-green-light);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}

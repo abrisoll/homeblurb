@@ -1,0 +1,11 @@
+[build]
+  command = "npm run build"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# The neighborhood-profile cache (src/lib/db.ts) lives in Turso, a hosted
+# libSQL database, reached over HTTP via TURSO_DATABASE_URL and
+# TURSO_AUTH_TOKEN — set both in Netlify's Site settings > Environment
+# variables. No local file or native module involved, so it persists
+# reliably across deploys, cold starts, and concurrent function instances.
