@@ -60,7 +60,13 @@ async function handlePost(request: Request) {
   // instead of this request, because live web-search research routinely
   // exceeds Netlify's ~60s limit for synchronous functions. The client
   // polls /api/neighborhood/status for the result.
-  if (process.env.NETLIFY) {
+  //
+  // `process.env.NETLIFY` is a build-time flag only — it's not forwarded
+  // into the deployed function's runtime environment, so it's always
+  // falsy here even in production. `AWS_LAMBDA_FUNCTION_NAME` is set by
+  // the Lambda runtime itself (which Netlify Functions run on) and is a
+  // reliable way to detect "running as a deployed function" vs local dev.
+  if (process.env.AWS_LAMBDA_FUNCTION_NAME) {
     let jobId: string;
     try {
       jobId = await createResearchJob({ neighborhood, city, zip });
