@@ -1,4 +1,10 @@
-import { createClient } from "@libsql/client";
+// Import the native-free "web" build explicitly rather than the package
+// root. We only ever do remote HTTP calls (Turso, not a local file), and
+// the root export resolves to the Node build with a native `libsql`
+// binding unless the bundler recognizes the "netlify" export condition —
+// which the Next.js function bundler doesn't, causing the native addon to
+// get pulled in and fail to load in the Lambda runtime.
+import { createClient } from "@libsql/client/web";
 import { randomUUID } from "node:crypto";
 import type { NeighborhoodProfile, ResearchJob } from "@/lib/types";
 
