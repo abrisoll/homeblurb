@@ -65,6 +65,13 @@ export interface GenerateResponseBody {
   social: string;
 }
 
+export interface GenerateJob {
+  id: string;
+  status: "pending" | "done" | "error";
+  result: GenerateResponseBody | null;
+  errorMessage: string | null;
+}
+
 export interface ApiErrorBody {
   error: string;
 }

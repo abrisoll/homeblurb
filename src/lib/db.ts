@@ -6,7 +6,7 @@
 // get pulled in and fail to load in the Lambda runtime.
 import { createClient } from "@libsql/client/web";
 import { randomUUID } from "node:crypto";
-import type { NeighborhoodProfile, ResearchJob } from "@/lib/types";
+import type { NeighborhoodProfile, ResearchJob, GenerateJob, GenerateResponseBody } from "@/lib/types";
 
 const client = createClient({
   url: process.env.TURSO_DATABASE_URL ?? "",
@@ -44,6 +44,13 @@ function ensureSchema(): Promise<void> {
             zip TEXT NOT NULL,
             profile TEXT,
             sources TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL
+          )`,
+          `CREATE TABLE IF NOT EXISTS generate_jobs (
+            id TEXT PRIMARY KEY,
+            status TEXT NOT NULL,
+            result TEXT,
             error_message TEXT,
             created_at TEXT NOT NULL
           )`,
@@ -169,6 +176,57 @@ export async function failResearchJob(id: string, errorMessage: string): Promise
 
   await client.execute({
     sql: `UPDATE research_jobs SET status = 'error', error_message = ? WHERE id = ?`,
+    args: [errorMessage, id],
+  });
+}
+
+export async function createGenerateJob(): Promise<string> {
+  await ensureSchema();
+
+  const id = randomUUID();
+  await client.execute({
+    sql: `INSERT INTO generate_jobs (id, status, created_at) VALUES (?, 'pending', ?)`,
+    args: [id, new Date().toISOString()],
+  });
+  return id;
+}
+
+export async function getGenerateJob(id: string): Promise<GenerateJob | null> {
+  await ensureSchema();
+
+  const result = await client.execute({
+    sql: `SELECT id, status, result, error_message FROM generate_jobs WHERE id = ?`,
+    args: [id],
+  });
+
+  const row = result.rows[0];
+  if (!row) return null;
+
+  return {
+    id: row.id as string,
+    status: row.status as GenerateJob["status"],
+    result: row.result ? (JSON.parse(row.result as string) as GenerateResponseBody) : null,
+    errorMessage: (row.error_message as string | null) ?? null,
+  };
+}
+
+export async function completeGenerateJob(
+  id: string,
+  result: GenerateResponseBody
+): Promise<void> {
+  await ensureSchema();
+
+  await client.execute({
+    sql: `UPDATE generate_jobs SET status = 'done', result = ? WHERE id = ?`,
+    args: [JSON.stringify(result), id],
+  });
+}
+
+export async function failGenerateJob(id: string, errorMessage: string): Promise<void> {
+  await ensureSchema();
+
+  await client.execute({
+    sql: `UPDATE generate_jobs SET status = 'error', error_message = ? WHERE id = ?`,
     args: [errorMessage, id],
   });
 }

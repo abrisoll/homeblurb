@@ -136,7 +136,7 @@ export default function PropertyForm() {
         detail:
           "Blending the property facts with the neighborhood story into copy that's ready to publish.",
       });
-      const generateRes = await fetch("/api/generate", {
+      const generateStartRes = await fetch("/api/generate/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -149,12 +149,17 @@ export default function PropertyForm() {
           neighborhoodProfile,
         }),
       });
-      const generateData = await generateRes.json();
-      if (!generateRes.ok) {
-        throw new Error(generateData.error ?? "Failed to generate the description.");
+      const generateStartData = await generateStartRes.json();
+      if (!generateStartRes.ok) {
+        throw new Error(generateStartData.error ?? "Failed to start description generation.");
       }
 
-      setResults(generateData as GenerateResponseBody);
+      const result: GenerateResponseBody =
+        generateStartData.status === "done"
+          ? generateStartData.result
+          : await pollForGenerateResult(generateStartData.jobId as string);
+
+      setResults(result);
       setStep("results");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -192,6 +197,31 @@ export default function PropertyForm() {
 
     throw new Error(
       "Neighborhood research is taking longer than expected. Please try again."
+    );
+  }
+
+  async function pollForGenerateResult(jobId: string): Promise<GenerateResponseBody> {
+    for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+
+      const statusRes = await fetch(
+        `/api/generate/status?jobId=${encodeURIComponent(jobId)}`
+      );
+      const statusData = await statusRes.json();
+      if (!statusRes.ok) {
+        throw new Error(statusData.error ?? "Failed to check generation status.");
+      }
+
+      if (statusData.status === "done") {
+        return statusData.result as GenerateResponseBody;
+      }
+      if (statusData.status === "error") {
+        throw new Error(statusData.errorMessage ?? "Description generation failed.");
+      }
+    }
+
+    throw new Error(
+      "Description generation is taking longer than expected. Please try again."
     );
   }
 
