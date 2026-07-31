@@ -3,24 +3,27 @@ import { NextResponse } from "next/server";
 export async function GET() {
   const report: Record<string, unknown> = {
     nodeVersion: process.version,
-    hasUrl: Boolean(process.env.TURSO_DATABASE_URL),
-    hasToken: Boolean(process.env.TURSO_AUTH_TOKEN),
+    siteUrlEnv: process.env.URL ?? null,
   };
 
   try {
-    const mod = await import("@libsql/client/web");
-    report.importOk = true;
-    report.hasCreateClient = typeof mod.createClient === "function";
+    const db = await import("@/lib/db");
+    report.dbImportOk = true;
 
-    const client = mod.createClient({
-      url: process.env.TURSO_DATABASE_URL ?? "",
-      authToken: process.env.TURSO_AUTH_TOKEN,
+    const cached = await db.getCachedNeighborhoodProfile("00000", "debug-probe");
+    report.cacheLookupOk = true;
+    report.cached = cached;
+
+    const jobId = await db.createResearchJob({
+      neighborhood: "debug-probe",
+      city: "debug-city",
+      zip: "00000",
     });
-    report.clientCreated = true;
+    report.jobCreated = jobId;
 
-    const result = await client.execute("SELECT 1 as ok");
-    report.queryOk = true;
-    report.rows = result.rows;
+    const job = await db.getResearchJob(jobId);
+    report.jobFetchOk = true;
+    report.job = job;
   } catch (err) {
     report.caught = true;
     if (err instanceof Error) {
@@ -30,6 +33,41 @@ export async function GET() {
       report.errorCause = err.cause ? String(err.cause) : null;
     } else {
       report.rawError = String(err);
+    }
+  }
+
+  try {
+    const siteUrl = process.env.URL ?? "https://glowing-duckanoo-8971d9.netlify.app";
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+    let res: Response;
+    try {
+      res = await fetch(`${siteUrl}/.netlify/functions/research-neighborhood-background`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jobId: "debug-noop",
+          neighborhood: "debug",
+          city: "debug",
+          state: null,
+          zip: "00000",
+        }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+    report.triggerStatus = res.status;
+    report.triggerOk = res.ok;
+  } catch (err) {
+    report.triggerCaught = true;
+    if (err instanceof Error) {
+      report.triggerErrorName = err.name;
+      report.triggerErrorMessage = err.message;
+      report.triggerErrorStack = err.stack;
+      report.triggerErrorCause = err.cause ? String(err.cause) : null;
+    } else {
+      report.triggerRawError = String(err);
     }
   }
 
