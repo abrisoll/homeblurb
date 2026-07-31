@@ -9,6 +9,11 @@
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
+[functions]
+  # Explicit, since auto-detection of the default netlify/functions/ path
+  # doesn't reliably kick in alongside the Next.js build plugin.
+  directory = "netlify/functions"
+
 # The neighborhood-profile cache (src/lib/db.ts) lives in Turso, a hosted
 # libSQL database, reached over HTTP via TURSO_DATABASE_URL and
 # TURSO_AUTH_TOKEN — set both in Netlify's Site settings > Environment
