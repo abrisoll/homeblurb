@@ -4,6 +4,11 @@ export async function GET() {
   const report: Record<string, unknown> = {
     nodeVersion: process.version,
     siteUrlEnv: process.env.URL ?? null,
+    NETLIFY: process.env.NETLIFY ?? null,
+    NETLIFY_DEV: process.env.NETLIFY_DEV ?? null,
+    AWS_LAMBDA_FUNCTION_NAME: process.env.AWS_LAMBDA_FUNCTION_NAME ?? null,
+    CONTEXT: process.env.CONTEXT ?? null,
+    DEPLOY_URL: process.env.DEPLOY_URL ?? null,
   };
 
   try {
