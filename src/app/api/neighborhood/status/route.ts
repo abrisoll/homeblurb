@@ -16,7 +16,8 @@ export async function GET(request: Request) {
     }
     return NextResponse.json(job);
   } catch (err) {
-    console.error("Failed to fetch research job:", err);
+    const detail = err instanceof Error ? `${err.name}: ${err.message}\n${err.stack ?? ""}` : String(err);
+    console.error("Failed to fetch research job:", detail);
     return NextResponse.json(
       { error: "Something went wrong while checking research status." },
       { status: 500 }

@@ -1,4 +1,5 @@
 import { createClient } from "@libsql/client";
+import { randomUUID } from "node:crypto";
 import type { NeighborhoodProfile, ResearchJob } from "@/lib/types";
 
 const client = createClient({
@@ -111,7 +112,7 @@ export async function createResearchJob(params: {
 }): Promise<string> {
   await ensureSchema();
 
-  const id = crypto.randomUUID();
+  const id = randomUUID();
   await client.execute({
     sql: `INSERT INTO research_jobs (id, status, neighborhood, city, zip, created_at)
           VALUES (?, 'pending', ?, ?, ?, ?)`,

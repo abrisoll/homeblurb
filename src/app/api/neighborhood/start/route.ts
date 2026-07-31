@@ -14,7 +14,15 @@ interface StartRequestBody {
   zip?: unknown;
 }
 
-export async function POST(request: Request) {
+function describeError(err: unknown): string {
+  if (err instanceof Error) {
+    const cause = err.cause ? ` | cause: ${String(err.cause)}` : "";
+    return `${err.name}: ${err.message}${cause}\n${err.stack ?? ""}`;
+  }
+  return String(err);
+}
+
+async function handlePost(request: Request) {
   let body: StartRequestBody;
   try {
     body = await request.json();
@@ -45,7 +53,7 @@ export async function POST(request: Request) {
       });
     }
   } catch (err) {
-    console.error("Neighborhood cache lookup failed, continuing without cache:", err);
+    console.error("Neighborhood cache lookup failed, continuing without cache:", describeError(err));
   }
 
   // On Netlify, research runs in a Background Function (up to 15 minutes)
@@ -57,7 +65,7 @@ export async function POST(request: Request) {
     try {
       jobId = await createResearchJob({ neighborhood, city, zip });
     } catch (err) {
-      console.error("Failed to create research job:", err);
+      console.error("Failed to create research job:", describeError(err));
       return NextResponse.json(
         { error: "Something went wrong while starting neighborhood research." },
         { status: 500 }
@@ -65,21 +73,31 @@ export async function POST(request: Request) {
     }
 
     const siteUrl = process.env.URL ?? new URL(request.url).origin;
+    const triggerUrl = `${siteUrl}/.netlify/functions/research-neighborhood-background`;
     try {
-      const triggerRes = await fetch(
-        `${siteUrl}/.netlify/functions/research-neighborhood-background`,
-        {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
+      let triggerRes: Response;
+      try {
+        triggerRes = await fetch(triggerUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ jobId, neighborhood, city, state, zip }),
-        }
-      );
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
       if (!triggerRes.ok) {
-        throw new Error(`Background function trigger returned ${triggerRes.status}`);
+        throw new Error(
+          `Background function trigger to ${triggerUrl} returned ${triggerRes.status}`
+        );
       }
     } catch (err) {
-      console.error("Failed to trigger background research function:", err);
-      await failResearchJob(jobId, "Failed to start neighborhood research.").catch(() => {});
+      console.error("Failed to trigger background research function:", describeError(err));
+      await failResearchJob(jobId, "Failed to start neighborhood research.").catch((e) =>
+        console.error("Also failed to mark job as failed:", describeError(e))
+      );
       return NextResponse.json(
         { error: "Failed to start neighborhood research." },
         { status: 500 }
@@ -109,7 +127,7 @@ export async function POST(request: Request) {
         cachedAt: new Date().toISOString(),
       });
     } catch (err) {
-      console.error("Failed to cache neighborhood profile:", err);
+      console.error("Failed to cache neighborhood profile:", describeError(err));
     }
 
     return NextResponse.json({ status: "done", profile, sources, fromCache: false });
@@ -117,9 +135,23 @@ export async function POST(request: Request) {
     if (err instanceof ClaudeError) {
       return NextResponse.json({ error: err.message }, { status: 422 });
     }
-    console.error("Unexpected neighborhood research error:", err);
+    console.error("Unexpected neighborhood research error:", describeError(err));
     return NextResponse.json(
       { error: "Something went wrong while researching the neighborhood." },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    return await handlePost(request);
+  } catch (err) {
+    // Last-resort safety net: never let an uncaught exception surface as an
+    // opaque platform-level 502 with no diagnostic information.
+    console.error("Unhandled error in /api/neighborhood/start:", describeError(err));
+    return NextResponse.json(
+      { error: "Something went wrong while starting neighborhood research." },
       { status: 500 }
     );
   }
